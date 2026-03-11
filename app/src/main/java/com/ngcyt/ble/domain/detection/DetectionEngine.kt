@@ -1,6 +1,7 @@
 package com.ngcyt.ble.domain.detection
 
 import com.ngcyt.ble.domain.model.*
+import com.ngcyt.ble.domain.model.DeviceLabel
 
 class DetectionEngine(
     private val ignoreMacs: Set<String> = emptySet(),
@@ -123,6 +124,10 @@ class DetectionEngine(
         serviceUuid: String? = null,
         correlatedCluster: String? = null,
         scanRecord: ByteArray? = null,
+        deviceName: String? = null,
+        manufacturerIds: Set<Int> = emptySet(),
+        manufacturerData: Map<Int, ByteArray>? = null,
+        serviceUuids: Set<String> = emptySet(),
         latitude: Double? = null,
         longitude: Double? = null,
         locationAccuracy: Float? = null,
@@ -165,6 +170,8 @@ class DetectionEngine(
                 existing.isCorrelated = true
                 existing.correlatedCluster = effectiveCluster
             }
+            deviceName?.let { existing.deviceName = it }
+            existing.manufacturerIds.addAll(manufacturerIds)
         } else {
             deviceHistory[effectiveId] = DeviceSighting(
                 mac = effectiveId,
@@ -173,13 +180,15 @@ class DetectionEngine(
                 lastSeen = timestamp,
                 isCorrelated = isCorrelated,
                 correlatedCluster = effectiveCluster,
+                deviceName = deviceName,
+                manufacturerIds = manufacturerIds.toMutableSet(),
                 latitude = latitude,
                 longitude = longitude,
                 locationAccuracy = locationAccuracy,
                 locationProvider = locationProvider,
             ).apply {
                 timeBuckets.add(timeBucket)
-                serviceUuid?.let { serviceUuids.add(it) }
+                serviceUuid?.let { this.serviceUuids.add(it) }
             }
         }
 
@@ -195,6 +204,13 @@ class DetectionEngine(
             durationMinutes = (sighting.lastSeen - sighting.firstSeen) / 60.0,
             serviceUuids = sighting.serviceUuids.sorted(),
             reasoning = generateReasoning(sighting, score, effectiveCluster),
+            deviceName = sighting.deviceName,
+            deviceLabel = DeviceLabel.resolve(
+                deviceName = sighting.deviceName,
+                manufacturerIds = sighting.manufacturerIds,
+                manufacturerData = manufacturerData,
+                serviceUuids = sighting.serviceUuids,
+            ),
             physicalDeviceId = effectiveCluster,
             associatedMacs = if (isCorrelated && fingerprintEngine != null) {
                 fingerprintEngine.getAllMacsForDevice(mac).filter { it != mac }.sorted()
@@ -246,6 +262,12 @@ class DetectionEngine(
                 durationMinutes = (sighting.lastSeen - sighting.firstSeen) / 60.0,
                 serviceUuids = sighting.serviceUuids.sorted(),
                 reasoning = generateReasoning(sighting, score, sighting.correlatedCluster),
+                deviceName = sighting.deviceName,
+                deviceLabel = DeviceLabel.resolve(
+                    deviceName = sighting.deviceName,
+                    manufacturerIds = sighting.manufacturerIds,
+                    serviceUuids = sighting.serviceUuids,
+                ),
                 physicalDeviceId = sighting.correlatedCluster,
                 associatedMacs = if (sighting.isCorrelated && fingerprintEngine != null) {
                     fingerprintEngine.getAllMacsForDevice(mac).filter { it != mac }.sorted()

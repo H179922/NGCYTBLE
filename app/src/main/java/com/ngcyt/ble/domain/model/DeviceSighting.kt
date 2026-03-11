@@ -10,6 +10,8 @@ data class DeviceSighting(
     var sightingCount: Int = 1,
     var isCorrelated: Boolean = false,
     var correlatedCluster: String? = null,
+    var deviceName: String? = null,
+    var manufacturerIds: MutableSet<Int> = mutableSetOf(),
     var latitude: Double? = null,
     var longitude: Double? = null,
     var locationAccuracy: Float? = null,

@@ -180,9 +180,21 @@ private fun DeviceHeader(mac: String, threat: ThreatAssessment?) {
             modifier = Modifier.padding(20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            // Device label if available
+            val label = threat?.deviceLabel ?: threat?.deviceName
+            if (label != null) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+            }
+
             Text(
                 text = mac,
-                style = MaterialTheme.typography.titleMedium.copy(
+                style = MaterialTheme.typography.titleSmall.copy(
                     fontFamily = FontFamily.Monospace,
                 ),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

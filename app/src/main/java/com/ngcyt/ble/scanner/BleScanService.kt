@@ -302,7 +302,7 @@ class BleScanService : Service() {
             deviceName = parsed.deviceName,
         )
 
-        // Feed into detection engine — pass fingerprint correlation result
+        // Feed into detection engine — pass fingerprint correlation result + device metadata
         val assessment = detectionEngine.analyzeDevice(
             mac = parsed.mac,
             deviceType = "BLE",
@@ -310,6 +310,10 @@ class BleScanService : Service() {
             timeBucket = "bucket_$bucketGeneration",
             serviceUuid = parsed.serviceUuids.firstOrNull(),
             correlatedCluster = cluster,
+            deviceName = parsed.deviceName,
+            manufacturerIds = parsed.manufacturerData.keys,
+            manufacturerData = parsed.manufacturerData,
+            serviceUuids = parsed.serviceUuids,
             latitude = loc?.latitude,
             longitude = loc?.longitude,
             locationAccuracy = loc?.accuracy,

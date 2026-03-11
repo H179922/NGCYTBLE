@@ -12,6 +12,8 @@ data class ThreatAssessment(
     val durationMinutes: Double,
     val serviceUuids: List<String>,
     val reasoning: String,
+    val deviceName: String? = null,
+    val deviceLabel: String? = null,
     val physicalDeviceId: String? = null,
     val associatedMacs: List<String> = emptyList(),
     val fingerprintConfidence: Double = 0.0,
