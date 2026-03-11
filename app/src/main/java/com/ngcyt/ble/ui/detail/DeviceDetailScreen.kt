@@ -50,7 +50,7 @@ private fun ThreatLevel.label(): String = when (this) {
 
 // -- Screen --
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun DeviceDetailScreen(
     onNavigateBack: () -> Unit,
@@ -255,6 +255,7 @@ private fun ThreatLevelBadge(level: ThreatLevel) {
 
 // -- Threat Assessment Section --
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ThreatAssessmentSection(threat: ThreatAssessment) {
     SectionCard(title = "Threat Assessment") {
