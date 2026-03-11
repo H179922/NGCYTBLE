@@ -14,10 +14,13 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.ngcyt.ble.domain.detection.DetectionEngine
 import com.ngcyt.ble.domain.fingerprint.BleFingerprintEngineImpl
+import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
+@AndroidEntryPoint
 class BleScanService : Service() {
 
     companion object {
@@ -29,7 +32,7 @@ class BleScanService : Service() {
         const val CHANNEL_THREAT_ALERT = "threat_alert"
         const val NOTIFICATION_ID = 1
         const val SCAN_INTERVAL_MS = 60_000L
-        const val BUCKET_ROTATION_MS = 300_000L // 5 minutes
+        const val BUCKET_ROTATION_MS = 120_000L // 2 minutes
         private const val MAX_SCAN_RETRIES = 3
 
         private val _isScanning = MutableStateFlow(false)
@@ -51,8 +54,8 @@ class BleScanService : Service() {
 
     private var bluetoothAdapter: BluetoothAdapter? = null
     private var bluetoothLeScanner: BluetoothLeScanner? = null
-    private var detectionEngine: DetectionEngine? = null
-    private var fingerprintEngine: BleFingerprintEngineImpl? = null
+    @Inject lateinit var detectionEngine: DetectionEngine
+    @Inject lateinit var fingerprintEngine: BleFingerprintEngineImpl
     private var locationManager: LocationManager? = null
     private var currentLocation: Location? = null
     private var wakeLock: PowerManager.WakeLock? = null
@@ -61,7 +64,7 @@ class BleScanService : Service() {
 
     private var scanStartTime = 0L
     private var lastBucketRotation = 0L
-    private var currentTimeBucket = "current"
+    private var bucketGeneration = 0
     private var scanRetryCount = 0
 
     // ── Bluetooth State BroadcastReceiver ──────────────────────────────────────
@@ -155,9 +158,6 @@ class BleScanService : Service() {
         val bluetoothManager = getSystemService(BLUETOOTH_SERVICE) as BluetoothManager
         bluetoothAdapter = bluetoothManager.adapter
         bluetoothLeScanner = bluetoothAdapter?.bluetoothLeScanner
-
-        fingerprintEngine = BleFingerprintEngineImpl()
-        detectionEngine = DetectionEngine(fingerprintEngine = fingerprintEngine)
 
         locationManager = getSystemService(LOCATION_SERVICE) as LocationManager
 
@@ -292,7 +292,7 @@ class BleScanService : Service() {
         val loc = currentLocation
 
         // Feed into fingerprinting engine directly with parsed fields
-        fingerprintEngine?.processAdvertisement(
+        val cluster = fingerprintEngine.processAdvertisement(
             mac = parsed.mac,
             serviceUuids = parsed.serviceUuids,
             manufacturerData = parsed.manufacturerData,
@@ -302,13 +302,14 @@ class BleScanService : Service() {
             deviceName = parsed.deviceName,
         )
 
-        // Feed into detection engine
-        val assessment = detectionEngine?.analyzeDevice(
+        // Feed into detection engine — pass fingerprint correlation result
+        val assessment = detectionEngine.analyzeDevice(
             mac = parsed.mac,
             deviceType = "BLE",
             timestamp = now,
-            timeBucket = currentTimeBucket,
+            timeBucket = "bucket_$bucketGeneration",
             serviceUuid = parsed.serviceUuids.firstOrNull(),
+            correlatedCluster = cluster,
             latitude = loc?.latitude,
             longitude = loc?.longitude,
             locationAccuracy = loc?.accuracy,
@@ -316,7 +317,7 @@ class BleScanService : Service() {
         )
 
         // Update threat count
-        val threats = detectionEngine?.getAllThreats() ?: emptyList()
+        val threats = detectionEngine.getAllThreats()
         _threatCount.value = threats.size
         updateNotification(threats.size)
     }
@@ -350,20 +351,11 @@ class BleScanService : Service() {
      * Called from [BucketRotationReceiver] when the alarm fires.
      */
     private fun performBucketRotation() {
-        detectionEngine?.rotateTimeBuckets()
+        detectionEngine.rotateTimeBuckets()
         lastBucketRotation = System.currentTimeMillis()
-        updateTimeBucket()
+        bucketGeneration++
         if (_isScanning.value) {
             scheduleBucketRotationAlarm()
-        }
-    }
-
-    private fun updateTimeBucket() {
-        val elapsed = System.currentTimeMillis() - scanStartTime
-        currentTimeBucket = when {
-            elapsed < 300_000 -> "current"
-            elapsed < 600_000 -> "0-5min"
-            else -> "current" // Reset after rotation
         }
     }
 

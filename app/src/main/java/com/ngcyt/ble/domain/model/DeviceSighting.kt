@@ -8,6 +8,8 @@ data class DeviceSighting(
     val timeBuckets: MutableSet<String> = mutableSetOf(),
     val serviceUuids: MutableSet<String> = mutableSetOf(),
     var sightingCount: Int = 1,
+    var isCorrelated: Boolean = false,
+    var correlatedCluster: String? = null,
     var latitude: Double? = null,
     var longitude: Double? = null,
     var locationAccuracy: Float? = null,

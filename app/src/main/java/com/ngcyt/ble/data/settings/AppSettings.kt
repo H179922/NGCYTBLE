@@ -27,7 +27,7 @@ class AppSettings(private val dataStore: DataStore<Preferences>) {
     }
 
     val ignoreMacs: Flow<Set<String>> = dataStore.data.map { it[IGNORE_MACS] ?: emptySet() }
-    val minAlertScore: Flow<Int> = dataStore.data.map { it[MIN_ALERT_SCORE] ?: 40 }
+    val minAlertScore: Flow<Int> = dataStore.data.map { it[MIN_ALERT_SCORE] ?: 0 }
     val scanIntervalSeconds: Flow<Int> = dataStore.data.map { it[SCAN_INTERVAL_SECONDS] ?: 60 }
     val retentionDays: Flow<Int> = dataStore.data.map { it[RETENTION_DAYS] ?: 30 }
     val locationMode: Flow<LocationMode> = dataStore.data.map {

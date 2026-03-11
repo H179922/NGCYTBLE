@@ -35,7 +35,7 @@ class ThreatDashboardViewModel @Inject constructor(
     val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
 
     private val minScore: StateFlow<Int> = appSettings.minAlertScore
-        .stateIn(viewModelScope, SharingStarted.Eagerly, 40)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
     init {
         // Refresh threats whenever scan state or threat count changes

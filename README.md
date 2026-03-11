@@ -27,19 +27,24 @@ Use NGCYTBLE standalone or connect it to a running CYT instance via **Pi Compani
 
 ### Threat Scoring
 
-NGCYTBLE calculates a threat score (0-100) for each detected BLE device based on four factors:
+NGCYTBLE calculates a threat score (0-100) for each detected BLE device. All detected devices appear immediately with escalating scores as evidence accumulates:
 
 | Factor | Points | Notes |
 |--------|--------|-------|
-| Time bucket presence | 20 pts per bucket (max 60) | Same 5-minute windows as CYT |
-| Duration 15+ min | 10 pts | Continuous presence bonus |
-| Duration 20+ min | 20 pts | Replaces the 15+ min bonus |
-| Service UUID match across windows | 10 pts | BLE equivalent of SSID probe matching |
+| First sighting (base) | 5 pts | Every detected device gets a base score |
+| Time bucket presence | 15 pts per 2-min bucket (max 60) | Devices seen across multiple time windows score higher |
+| Sighting frequency (2+) | 5 pts | Devices advertising repeatedly |
+| Sighting frequency (5+) | 10 pts total | Frequently advertising devices |
+| Duration 5+ min | 5 pts | Short presence bonus |
+| Duration 10+ min | 10 pts | Moderate presence bonus |
+| Duration 15+ min | 15 pts | Extended presence bonus |
+| Duration 20+ min | 20 pts | Long presence bonus |
+| Service UUID match | 10 pts | BLE equivalent of SSID probe matching |
 | MAC correlation (fingerprint-linked) | 15 pts | Device using BLE MAC rotation to evade detection |
 
-Alerts include signal strength, threat level, and which time windows the device was seen in:
+Alerts include threat level and which time windows the device was seen in:
 ```
-[HIGH] AA:BB:CC:DD:EE:FF (BLE) | Score: 75/100 | RSSI: -42dBm | Windows: 5-10min, 10-15min, 15-20min
+[HIGH] AA:BB:CC:DD:EE:FF (BLE) | Score: 75/100 | Windows: bucket_0, bucket_1, bucket_2
   Correlated MACs: 3 linked via fingerprinting
   Location: 40.7128, -74.0060 (WiFi, +/-50m)
 ```
@@ -155,9 +160,9 @@ Vectors are stored in Room as BLOBs. At <500 tracked devices, a full similarity 
 
 ### Requirements
 
-- Android Studio Hedgehog (2023.1.1) or later
-- JDK 17
-- Android SDK 35 (target)
+- Android Studio Panda 2 (2025.3.2) or later
+- JDK 21
+- Android SDK 36 (target), AGP 9.1.0
 - Android SDK 26 (minimum — Android 8.0)
 
 ### Build
@@ -185,16 +190,22 @@ Install on a connected device:
 
 | Permission | Why | Required |
 |------------|-----|----------|
-| `BLUETOOTH_SCAN` | BLE scanning | Yes |
+| `BLUETOOTH_SCAN` | BLE scanning (with `neverForLocation` flag on API 31+) | Yes |
 | `BLUETOOTH_CONNECT` | Device name resolution | Yes |
-| `ACCESS_FINE_LOCATION` | Required by Android for BLE scan results | Yes |
-| `ACCESS_COARSE_LOCATION` | WiFi-derived location | Yes |
+| `ACCESS_FINE_LOCATION` | Required for BLE scan on API < 31; optional on 31+ for location tagging | API < 31: Yes, API 31+: Optional |
+| `ACCESS_COARSE_LOCATION` | WiFi-derived location | Optional |
 | `FOREGROUND_SERVICE` | Keep scanning alive in background | Yes |
-| `POST_NOTIFICATIONS` | Threat alert notifications | Yes |
+| `FOREGROUND_SERVICE_CONNECTED_DEVICE` | Foreground service type for BLE | Yes |
+| `POST_NOTIFICATIONS` | Threat alert notifications | Yes (API 33+) |
+| `WAKE_LOCK` | CPU wake during scan processing in Doze | Yes |
+| `SCHEDULE_EXACT_ALARM` | Doze-safe bucket rotation timers | Yes |
+| `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` | Battery optimization exemption dialog | Yes |
 | `INTERNET` | External API push, Pi companion mode | Yes |
 | `ACCESS_WIFI_STATE` | WiFi-derived location | Yes |
 
-NGCYTBLE requests permissions at runtime with explanations. BLE scanning on Android requires location permission by OS policy — NGCYTBLE uses WiFi-derived location by default (low battery, ~30-100m accuracy). GPS is available as an opt-in for users wanting precision.
+NGCYTBLE requests permissions at runtime with step-by-step explanations. On Android 12+ (API 31), **location is optional** — BLE scanning uses the `neverForLocation` flag, so the app works without location permission. Location can be granted optionally to tag device sightings with coordinates. On older Android versions, location is required by the OS for BLE scanning.
+
+The permission flow also offers an optional battery optimization exemption step. Without it, Android may pause scanning during Doze mode.
 
 ## Pi Companion Setup
 
@@ -255,9 +266,9 @@ Both modes queue outbound data in a Room table (`api_sync_queue`) for offline re
 | Preferences | DataStore |
 | Networking | Ktor Client |
 | Background Work | Foreground Service + WorkManager |
-| Build | Gradle with Kotlin DSL |
+| Build | AGP 9.1.0, Gradle with Kotlin DSL |
 | Min SDK | 26 (Android 8.0) |
-| Target SDK | 35 |
+| Target SDK | 36 |
 
 ## Credits
 

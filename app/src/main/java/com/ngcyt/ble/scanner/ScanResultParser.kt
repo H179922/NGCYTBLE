@@ -1,5 +1,6 @@
 package com.ngcyt.ble.scanner
 
+import android.annotation.SuppressLint
 import android.bluetooth.le.ScanResult
 import android.os.ParcelUuid
 
@@ -15,6 +16,7 @@ data class ParsedScanResult(
 )
 
 object ScanResultParser {
+    @SuppressLint("MissingPermission")
     fun parse(result: ScanResult): ParsedScanResult {
         val record = result.scanRecord
 

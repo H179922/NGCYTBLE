@@ -1,12 +1,14 @@
 package com.ngcyt.ble.ui.permissions
 
 import android.Manifest
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -244,11 +246,27 @@ fun PermissionScreen(
                 BatteryOptimizationButtons(
                     context = context,
                     onOpenSettings = {
-                        @Suppress("BatteryLife")
-                        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                            data = Uri.parse("package:${context.packageName}")
+                        try {
+                            @Suppress("BatteryLife")
+                            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                data = Uri.parse("package:${context.packageName}")
+                            }
+                            batteryLauncher.launch(intent)
+                        } catch (e: ActivityNotFoundException) {
+                            // Some OEMs remove the direct dialog — fall back to battery settings list
+                            Log.w("PermissionScreen", "Direct battery dialog unavailable, opening settings", e)
+                            try {
+                                val fallback = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                                batteryLauncher.launch(fallback)
+                            } catch (e2: ActivityNotFoundException) {
+                                // Last resort: open general app settings
+                                Log.w("PermissionScreen", "Battery settings unavailable, opening app info", e2)
+                                val appInfo = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                    data = Uri.parse("package:${context.packageName}")
+                                }
+                                batteryLauncher.launch(appInfo)
+                            }
                         }
-                        batteryLauncher.launch(intent)
                     },
                     onSkip = {
                         advanceStep(currentIndex, steps.size) { currentIndex = it }

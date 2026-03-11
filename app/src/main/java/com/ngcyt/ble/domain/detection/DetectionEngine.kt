@@ -16,10 +16,15 @@ class DetectionEngine(
             "15-20min" to (15 to 20),
         )
 
-        const val BUCKET_PRESENCE_POINTS = 20
+        const val FIRST_SIGHTING_POINTS = 5
+        const val BUCKET_PRESENCE_POINTS = 15
         const val MAX_BUCKET_POINTS = 60
-        const val DURATION_BONUS = 10
-        const val LONG_DURATION_BONUS = 20
+        const val SIGHTING_COUNT_BONUS_LOW = 5   // 2+ sightings
+        const val SIGHTING_COUNT_BONUS_HIGH = 5  // 5+ sightings (additive)
+        const val DURATION_5MIN_BONUS = 5
+        const val DURATION_10MIN_BONUS = 10
+        const val DURATION_15MIN_BONUS = 15
+        const val DURATION_20MIN_BONUS = 20
         const val SERVICE_UUID_BONUS = 10
         const val MAC_CORRELATION_BONUS = 15
     }
@@ -34,18 +39,30 @@ class DetectionEngine(
     fun calculateThreatScore(sighting: DeviceSighting, isCorrelated: Boolean = false): Int {
         var score = 0
 
-        // Base score from number of time buckets (max 60 points)
-        val bucketCount = sighting.timeBuckets.size
-        if (bucketCount > 1) {
-            score += minOf((bucketCount - 1) * BUCKET_PRESENCE_POINTS, MAX_BUCKET_POINTS)
+        // Base score: every detected device gets first-sighting points
+        score += FIRST_SIGHTING_POINTS
+
+        // Sighting count bonus
+        if (sighting.sightingCount >= 5) {
+            score += SIGHTING_COUNT_BONUS_LOW + SIGHTING_COUNT_BONUS_HIGH
+        } else if (sighting.sightingCount >= 2) {
+            score += SIGHTING_COUNT_BONUS_LOW
         }
 
-        // Duration bonus
+        // Bucket presence score (starts from 1 bucket)
+        val bucketCount = sighting.timeBuckets.size
+        score += minOf(bucketCount * BUCKET_PRESENCE_POINTS, MAX_BUCKET_POINTS)
+
+        // Duration bonus (graduated thresholds)
         val durationMins = (sighting.lastSeen - sighting.firstSeen) / 60.0
         if (durationMins >= 20) {
-            score += LONG_DURATION_BONUS
+            score += DURATION_20MIN_BONUS
         } else if (durationMins >= 15) {
-            score += DURATION_BONUS
+            score += DURATION_15MIN_BONUS
+        } else if (durationMins >= 10) {
+            score += DURATION_10MIN_BONUS
+        } else if (durationMins >= 5) {
+            score += DURATION_5MIN_BONUS
         }
 
         // Service UUID match bonus
@@ -53,8 +70,8 @@ class DetectionEngine(
             score += SERVICE_UUID_BONUS
         }
 
-        // MAC correlation bonus
-        if (isCorrelated) {
+        // MAC correlation bonus — use stored state or explicit parameter
+        if (isCorrelated || sighting.isCorrelated) {
             score += MAC_CORRELATION_BONUS
         }
 
@@ -67,10 +84,16 @@ class DetectionEngine(
         val bucketCount = sighting.timeBuckets.size
         if (bucketCount > 1) {
             reasons.add("Device seen in $bucketCount time periods")
+        } else {
+            reasons.add("First sighting detected")
+        }
+
+        if (sighting.sightingCount >= 5) {
+            reasons.add("Advertising frequently (${sighting.sightingCount} sightings)")
         }
 
         val durationMins = (sighting.lastSeen - sighting.firstSeen) / 60.0
-        if (durationMins >= 15) {
+        if (durationMins >= 5) {
             reasons.add("Present for ${durationMins.toInt()} minutes")
         }
 
@@ -98,6 +121,7 @@ class DetectionEngine(
         timestamp: Double,
         timeBucket: String,
         serviceUuid: String? = null,
+        correlatedCluster: String? = null,
         scanRecord: ByteArray? = null,
         latitude: Double? = null,
         longitude: Double? = null,
@@ -106,10 +130,10 @@ class DetectionEngine(
     ): ThreatAssessment? {
         if (mac in ignoreMacs) return null
 
-        // Process through fingerprinting engine if available
-        var correlatedCluster: String? = null
-        if (fingerprintEngine != null && scanRecord != null) {
-            correlatedCluster = fingerprintEngine.processAdvertisement(
+        // Use caller-provided correlation result; fall back to internal fingerprinting
+        var effectiveCluster = correlatedCluster
+        if (effectiveCluster == null && fingerprintEngine != null && scanRecord != null) {
+            effectiveCluster = fingerprintEngine.processAdvertisement(
                 mac = mac,
                 scanRecord = scanRecord,
                 timestamp = timestamp,
@@ -118,16 +142,17 @@ class DetectionEngine(
 
         // Record behavior for similarity search
         if (similarityEngine != null) {
-            val deviceId = correlatedCluster ?: mac
+            val deviceId = effectiveCluster ?: mac
             similarityEngine.recordDeviceBehavior(
                 deviceId = deviceId,
                 timestamp = timestamp,
                 serviceUuid = serviceUuid,
-                usesRandomization = correlatedCluster != null,
+                usesRandomization = effectiveCluster != null,
             )
         }
 
-        val effectiveId = correlatedCluster ?: mac
+        val effectiveId = effectiveCluster ?: mac
+        val isCorrelated = effectiveCluster != null
 
         // Update or create sighting
         val existing = deviceHistory[effectiveId]
@@ -136,12 +161,18 @@ class DetectionEngine(
                 timeBucket, timestamp, serviceUuid,
                 latitude, longitude, locationAccuracy, locationProvider,
             )
+            if (isCorrelated) {
+                existing.isCorrelated = true
+                existing.correlatedCluster = effectiveCluster
+            }
         } else {
             deviceHistory[effectiveId] = DeviceSighting(
                 mac = effectiveId,
                 deviceType = deviceType,
                 firstSeen = timestamp,
                 lastSeen = timestamp,
+                isCorrelated = isCorrelated,
+                correlatedCluster = effectiveCluster,
                 latitude = latitude,
                 longitude = longitude,
                 locationAccuracy = locationAccuracy,
@@ -153,73 +184,57 @@ class DetectionEngine(
         }
 
         val sighting = deviceHistory[effectiveId]!!
-        val isCorrelated = correlatedCluster != null
         val score = calculateThreatScore(sighting, isCorrelated)
 
-        if (score > 0) {
-            val assessment = ThreatAssessment(
-                mac = mac,
-                deviceType = deviceType,
-                threatScore = score,
-                threatLevel = ThreatLevel.fromScore(score),
-                timeBucketsPresent = sighting.timeBuckets.sorted(),
-                durationMinutes = (sighting.lastSeen - sighting.firstSeen) / 60.0,
-                serviceUuids = sighting.serviceUuids.sorted(),
-                reasoning = generateReasoning(sighting, score, correlatedCluster),
-                physicalDeviceId = correlatedCluster,
-                associatedMacs = if (isCorrelated && fingerprintEngine != null) {
-                    fingerprintEngine.getAllMacsForDevice(mac).filter { it != mac }.sorted()
-                } else emptyList(),
-                fingerprintConfidence = if (isCorrelated && fingerprintEngine != null) {
-                    fingerprintEngine.getDeviceForMac(mac)?.clusterConfidence ?: 0.0
-                } else 0.0,
-                isMacRandomized = isCorrelated,
-                latitude = sighting.latitude,
-                longitude = sighting.longitude,
-                locationAccuracy = sighting.locationAccuracy,
-            )
-
-            if (score >= 20) {
-                alertCallbacks.forEach { it(assessment) }
-            }
-
-            return assessment
-        }
-
-        return null
-    }
-
-    fun rotateTimeBuckets() {
-        // Remove devices only seen in oldest bucket
-        val toRemove = deviceHistory.entries
-            .filter { it.value.timeBuckets == mutableSetOf("15-20min") }
-            .map { it.key }
-        toRemove.forEach { deviceHistory.remove(it) }
-
-        // Age the bucket labels
-        val bucketMap = mapOf(
-            "10-15min" to "15-20min",
-            "5-10min" to "10-15min",
-            "0-5min" to "5-10min",
-            "current" to "0-5min",
+        val assessment = ThreatAssessment(
+            mac = mac,
+            deviceType = deviceType,
+            threatScore = score,
+            threatLevel = ThreatLevel.fromScore(score),
+            timeBucketsPresent = sighting.timeBuckets.sorted(),
+            durationMinutes = (sighting.lastSeen - sighting.firstSeen) / 60.0,
+            serviceUuids = sighting.serviceUuids.sorted(),
+            reasoning = generateReasoning(sighting, score, effectiveCluster),
+            physicalDeviceId = effectiveCluster,
+            associatedMacs = if (isCorrelated && fingerprintEngine != null) {
+                fingerprintEngine.getAllMacsForDevice(mac).filter { it != mac }.sorted()
+            } else emptyList(),
+            fingerprintConfidence = if (isCorrelated && fingerprintEngine != null) {
+                fingerprintEngine.getDeviceForMac(mac)?.clusterConfidence ?: 0.0
+            } else 0.0,
+            isMacRandomized = isCorrelated,
+            latitude = sighting.latitude,
+            longitude = sighting.longitude,
+            locationAccuracy = sighting.locationAccuracy,
         )
 
-        for (sighting in deviceHistory.values) {
-            val newBuckets = mutableSetOf<String>()
-            for (bucket in sighting.timeBuckets) {
-                val mapped = bucketMap[bucket]
-                if (mapped != null) {
-                    newBuckets.add(mapped)
-                } else if (bucket == "15-20min") {
-                    newBuckets.add(bucket)
-                }
-            }
-            sighting.timeBuckets.clear()
-            sighting.timeBuckets.addAll(newBuckets)
+        // Only fire alert callbacks for meaningful scores
+        if (score >= 20) {
+            alertCallbacks.forEach { it(assessment) }
         }
+
+        return assessment
     }
 
-    fun getAllThreats(minScore: Int = 20): List<ThreatAssessment> {
+    fun rotateTimeBuckets(maxBucketAge: Int = 10) {
+        // Remove devices whose most recent bucket is too old
+        // (i.e., not seen in the last maxBucketAge rotations)
+        // Bucket names are "bucket_N" where N is the generation counter
+        val toRemove = mutableListOf<String>()
+        for ((mac, sighting) in deviceHistory) {
+            val maxGen = sighting.timeBuckets
+                .mapNotNull { it.removePrefix("bucket_").toIntOrNull() }
+                .maxOrNull() ?: -1
+            // Will be compared against current generation by caller
+            // For now, just prune devices not seen in any recent bucket
+            if (sighting.timeBuckets.isEmpty()) {
+                toRemove.add(mac)
+            }
+        }
+        toRemove.forEach { deviceHistory.remove(it) }
+    }
+
+    fun getAllThreats(minScore: Int = 0): List<ThreatAssessment> {
         return deviceHistory.map { (mac, sighting) ->
             val score = calculateThreatScore(sighting)
             ThreatAssessment(
@@ -230,7 +245,15 @@ class DetectionEngine(
                 timeBucketsPresent = sighting.timeBuckets.sorted(),
                 durationMinutes = (sighting.lastSeen - sighting.firstSeen) / 60.0,
                 serviceUuids = sighting.serviceUuids.sorted(),
-                reasoning = generateReasoning(sighting, score),
+                reasoning = generateReasoning(sighting, score, sighting.correlatedCluster),
+                physicalDeviceId = sighting.correlatedCluster,
+                associatedMacs = if (sighting.isCorrelated && fingerprintEngine != null) {
+                    fingerprintEngine.getAllMacsForDevice(mac).filter { it != mac }.sorted()
+                } else emptyList(),
+                fingerprintConfidence = if (sighting.isCorrelated && fingerprintEngine != null) {
+                    fingerprintEngine.getDeviceForMac(mac)?.clusterConfidence ?: 0.0
+                } else 0.0,
+                isMacRandomized = sighting.isCorrelated,
                 latitude = sighting.latitude,
                 longitude = sighting.longitude,
                 locationAccuracy = sighting.locationAccuracy,
