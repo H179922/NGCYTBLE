@@ -51,12 +51,14 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun hasRequiredPermissions(): Boolean {
-        val required = mutableListOf(
-            Manifest.permission.ACCESS_FINE_LOCATION,
-        )
+        val required = mutableListOf<String>()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            // API 31+: BLE scan without location (neverForLocation flag in manifest)
             required.add(Manifest.permission.BLUETOOTH_SCAN)
             required.add(Manifest.permission.BLUETOOTH_CONNECT)
+        } else {
+            // API < 31: Location required for BLE scanning
+            required.add(Manifest.permission.ACCESS_FINE_LOCATION)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             required.add(Manifest.permission.POST_NOTIFICATIONS)

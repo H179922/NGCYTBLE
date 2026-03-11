@@ -45,39 +45,69 @@ private data class PermissionInfo(
     val permissions: List<String>,
 )
 
-private fun buildPermissionSteps(): List<PermissionInfo> {
-    val steps = mutableListOf<PermissionInfo>()
+private data class PermissionStepConfig(
+    val info: PermissionInfo,
+    val required: Boolean,
+)
+
+private fun buildPermissionSteps(): List<PermissionStepConfig> {
+    val steps = mutableListOf<PermissionStepConfig>()
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         steps.add(
-            PermissionInfo(
-                step = PermissionStep.BLUETOOTH,
-                title = "Bluetooth Access",
-                explanation = "NGCYT BLE needs Bluetooth permission to scan for nearby BLE devices and detect potential surveillance trackers. Without this permission, the app cannot function.",
-                permissions = listOf(
-                    Manifest.permission.BLUETOOTH_SCAN,
-                    Manifest.permission.BLUETOOTH_CONNECT,
+            PermissionStepConfig(
+                info = PermissionInfo(
+                    step = PermissionStep.BLUETOOTH,
+                    title = "Bluetooth Access",
+                    explanation = "NGCYT BLE needs Bluetooth permission to scan for nearby BLE devices and detect potential surveillance trackers. Without this permission, the app cannot function.",
+                    permissions = listOf(
+                        Manifest.permission.BLUETOOTH_SCAN,
+                        Manifest.permission.BLUETOOTH_CONNECT,
+                    ),
                 ),
+                required = true,
             )
         )
     }
 
-    steps.add(
-        PermissionInfo(
-            step = PermissionStep.LOCATION,
-            title = "Location Access",
-            explanation = "Location permission is required by Android to perform BLE scans. It also allows the app to tag device sightings with location data to help identify devices that follow you across locations.",
-            permissions = listOf(Manifest.permission.ACCESS_FINE_LOCATION),
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+        // Pre-API 31: Location required for BLE scanning
+        steps.add(
+            PermissionStepConfig(
+                info = PermissionInfo(
+                    step = PermissionStep.LOCATION,
+                    title = "Location Access",
+                    explanation = "On this Android version, location permission is required to perform BLE scans. It also allows the app to tag device sightings with location data.",
+                    permissions = listOf(Manifest.permission.ACCESS_FINE_LOCATION),
+                ),
+                required = true,
+            )
         )
-    )
+    } else {
+        // API 31+: Location optional, used for sighting tagging only
+        steps.add(
+            PermissionStepConfig(
+                info = PermissionInfo(
+                    step = PermissionStep.LOCATION,
+                    title = "Location Access (Optional)",
+                    explanation = "Location allows the app to tag device sightings with coordinates, helping identify devices that follow you across locations. BLE scanning works without this permission.",
+                    permissions = listOf(Manifest.permission.ACCESS_FINE_LOCATION),
+                ),
+                required = false,
+            )
+        )
+    }
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         steps.add(
-            PermissionInfo(
-                step = PermissionStep.NOTIFICATIONS,
-                title = "Notifications",
-                explanation = "Enable notifications to receive real-time alerts when a suspicious BLE device is detected near you. You can customize alert thresholds in Settings.",
-                permissions = listOf(Manifest.permission.POST_NOTIFICATIONS),
+            PermissionStepConfig(
+                info = PermissionInfo(
+                    step = PermissionStep.NOTIFICATIONS,
+                    title = "Notifications",
+                    explanation = "Enable notifications to receive real-time alerts when a suspicious BLE device is detected near you. You can customize alert thresholds in Settings.",
+                    permissions = listOf(Manifest.permission.POST_NOTIFICATIONS),
+                ),
+                required = true,
             )
         )
     }
@@ -99,11 +129,7 @@ fun PermissionScreen(
         val allGranted = results.values.all { it }
         if (allGranted) {
             denied = false
-            if (currentIndex < steps.size - 1) {
-                currentIndex++
-            } else {
-                currentIndex = steps.size // mark complete
-            }
+            advanceStep(currentIndex, steps.size) { currentIndex = it }
         } else {
             denied = true
         }
@@ -117,7 +143,8 @@ fun PermissionScreen(
     }
 
     if (currentIndex < steps.size) {
-        val current = steps[currentIndex]
+        val currentConfig = steps[currentIndex]
+        val current = currentConfig.info
 
         Column(
             modifier = Modifier
@@ -135,7 +162,7 @@ fun PermissionScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
-                text = "Permission Required",
+                text = if (currentConfig.required) "Permission Required" else "Optional Permission",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
             )
@@ -165,7 +192,7 @@ fun PermissionScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            if (denied) {
+            if (denied && currentConfig.required) {
                 Text(
                     text = "Permission was denied. The app needs this permission to work properly.",
                     style = MaterialTheme.typography.bodySmall,
@@ -183,6 +210,36 @@ fun PermissionScreen(
                 ) {
                     Text("Request Again")
                 }
+            } else if (denied && !currentConfig.required) {
+                Text(
+                    text = "Permission skipped. You can enable it later in Settings.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(bottom = 16.dp),
+                )
+
+                Button(
+                    onClick = {
+                        denied = false
+                        advanceStep(currentIndex, steps.size) { currentIndex = it }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Continue Without ${current.title.removeSuffix(" (Optional)")}")
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedButton(
+                    onClick = {
+                        denied = false
+                        launcher.launch(current.permissions.toTypedArray())
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Try Again")
+                }
             } else {
                 Button(
                     onClick = {
@@ -190,9 +247,29 @@ fun PermissionScreen(
                     },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text("Grant ${current.title}")
+                    Text("Grant ${current.title.removeSuffix(" (Optional)")}")
+                }
+
+                if (!currentConfig.required) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = {
+                            advanceStep(currentIndex, steps.size) { currentIndex = it }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Skip")
+                    }
                 }
             }
         }
+    }
+}
+
+private fun advanceStep(currentIndex: Int, totalSteps: Int, update: (Int) -> Unit) {
+    if (currentIndex < totalSteps - 1) {
+        update(currentIndex + 1)
+    } else {
+        update(totalSteps)
     }
 }

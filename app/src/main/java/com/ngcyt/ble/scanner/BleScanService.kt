@@ -103,8 +103,9 @@ class BleScanService : Service() {
             startForeground(NOTIFICATION_ID, notification)
         }
 
-        // Start location updates
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+        // Start location updates (optional — app works without location permission on API 31+)
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
             try {
                 locationManager?.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, SCAN_INTERVAL_MS, 0f, locationListener)
             } catch (_: Exception) {}
