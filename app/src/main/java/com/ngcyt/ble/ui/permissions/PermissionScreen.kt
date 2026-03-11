@@ -1,7 +1,12 @@
 package com.ngcyt.ble.ui.permissions
 
 import android.Manifest
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
+import android.os.PowerManager
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -27,6 +32,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -35,6 +41,7 @@ private enum class PermissionStep {
     BLUETOOTH,
     LOCATION,
     NOTIFICATIONS,
+    BATTERY_OPTIMIZATION,
     COMPLETE,
 }
 
@@ -112,6 +119,21 @@ private fun buildPermissionSteps(): List<PermissionStepConfig> {
         )
     }
 
+    // Battery optimization step (always added, skippable)
+    steps.add(
+        PermissionStepConfig(
+            info = PermissionInfo(
+                step = PermissionStep.BATTERY_OPTIMIZATION,
+                title = "Unrestricted Battery",
+                explanation = "For reliable continuous scanning, NGCYTBLE should be excluded from battery optimization. " +
+                    "Without this, Android may pause scanning when the screen is off or the device is idle, " +
+                    "potentially missing surveillance trackers. This step is optional but strongly recommended.",
+                permissions = emptyList(), // Handled via Settings intent, not runtime permission
+            ),
+            required = false,
+        )
+    )
+
     return steps
 }
 
@@ -119,6 +141,7 @@ private fun buildPermissionSteps(): List<PermissionStepConfig> {
 fun PermissionScreen(
     onAllGranted: () -> Unit,
 ) {
+    val context = LocalContext.current
     val steps = remember { buildPermissionSteps() }
     var currentIndex by rememberSaveable { mutableIntStateOf(0) }
     var denied by rememberSaveable { mutableStateOf(false) }
@@ -135,6 +158,18 @@ fun PermissionScreen(
         }
     }
 
+    // Launcher for battery optimization settings (returns to app after)
+    val batteryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult(),
+    ) {
+        // After returning from battery settings, check if exemption was granted
+        val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+        if (pm.isIgnoringBatteryOptimizations(context.packageName)) {
+            advanceStep(currentIndex, steps.size) { currentIndex = it }
+        }
+        // If not granted, user can still skip — don't force
+    }
+
     // If no steps needed or all done, navigate
     LaunchedEffect(currentIndex, steps.size) {
         if (steps.isEmpty() || currentIndex >= steps.size) {
@@ -145,6 +180,18 @@ fun PermissionScreen(
     if (currentIndex < steps.size) {
         val currentConfig = steps[currentIndex]
         val current = currentConfig.info
+
+        // For battery optimization step, check if already exempt
+        if (current.step == PermissionStep.BATTERY_OPTIMIZATION) {
+            val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+            if (pm.isIgnoringBatteryOptimizations(context.packageName)) {
+                // Already exempt — skip this step automatically
+                LaunchedEffect(Unit) {
+                    advanceStep(currentIndex, steps.size) { currentIndex = it }
+                }
+                return
+            }
+        }
 
         Column(
             modifier = Modifier
@@ -192,7 +239,22 @@ fun PermissionScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            if (denied && currentConfig.required) {
+            // Battery optimization step uses a different flow
+            if (current.step == PermissionStep.BATTERY_OPTIMIZATION) {
+                BatteryOptimizationButtons(
+                    context = context,
+                    onOpenSettings = {
+                        @Suppress("BatteryLife")
+                        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                            data = Uri.parse("package:${context.packageName}")
+                        }
+                        batteryLauncher.launch(intent)
+                    },
+                    onSkip = {
+                        advanceStep(currentIndex, steps.size) { currentIndex = it }
+                    },
+                )
+            } else if (denied && currentConfig.required) {
                 Text(
                     text = "Permission was denied. The app needs this permission to work properly.",
                     style = MaterialTheme.typography.bodySmall,
@@ -263,6 +325,29 @@ fun PermissionScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun BatteryOptimizationButtons(
+    context: Context,
+    onOpenSettings: () -> Unit,
+    onSkip: () -> Unit,
+) {
+    Button(
+        onClick = onOpenSettings,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text("Disable Battery Optimization")
+    }
+
+    Spacer(modifier = Modifier.height(8.dp))
+
+    OutlinedButton(
+        onClick = onSkip,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text("Skip for Now")
     }
 }
 

@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import com.ngcyt.ble.scanner.ScanStatus
 
 @Composable
 fun ThreatDashboardScreen(
@@ -28,6 +29,7 @@ fun ThreatDashboardScreen(
 ) {
     val threats by viewModel.threats.collectAsState()
     val isScanning by viewModel.isScanning.collectAsState()
+    val scanStatus by viewModel.scanStatus.collectAsState()
     val deviceCount by viewModel.deviceCount.collectAsState()
     val isRefreshing by viewModel.isRefreshing.collectAsState()
 
@@ -35,6 +37,7 @@ fun ThreatDashboardScreen(
         // Top status bar
         ScanStatusHeader(
             isScanning = isScanning,
+            scanStatus = scanStatus,
             deviceCount = deviceCount,
             onStartScan = viewModel::startScan,
             onStopScan = viewModel::stopScan,
@@ -47,7 +50,7 @@ fun ThreatDashboardScreen(
             modifier = Modifier.fillMaxSize(),
         ) {
             if (threats.isEmpty()) {
-                EmptyState(isScanning = isScanning)
+                EmptyState(isScanning = isScanning, scanStatus = scanStatus)
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
@@ -72,6 +75,7 @@ fun ThreatDashboardScreen(
 @Composable
 private fun ScanStatusHeader(
     isScanning: Boolean,
+    scanStatus: ScanStatus,
     deviceCount: Int,
     onStartScan: () -> Unit,
     onStopScan: () -> Unit,
@@ -80,52 +84,120 @@ private fun ScanStatusHeader(
         tonalElevation = 2.dp,
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // Status indicator and device count
+        Column {
             Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                // Scan status dot
-                Box(
-                    modifier = Modifier
-                        .size(10.dp)
-                        .clip(CircleShape)
-                        .background(if (isScanning) Color(0xFF4CAF50) else Color.Gray)
-                )
+                // Status indicator and device count
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    // Scan status dot — color reflects status
+                    val dotColor = when (scanStatus) {
+                        ScanStatus.SCANNING -> Color(0xFF4CAF50) // green
+                        ScanStatus.BLUETOOTH_OFF -> Color(0xFFFF9800) // orange
+                        ScanStatus.LOCATION_REQUIRED -> Color(0xFFFF9800) // orange
+                        ScanStatus.SCAN_FAILED -> Color(0xFFF44336) // red
+                        ScanStatus.PERMISSION_DENIED -> Color(0xFFF44336) // red
+                        ScanStatus.IDLE -> Color.Gray
+                    }
 
-                Column {
-                    Text(
-                        text = if (isScanning) "Scanning" else "Paused",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .clip(CircleShape)
+                            .background(dotColor)
                     )
-                    Text(
-                        text = "$deviceCount threat(s) detected",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+
+                    Column {
+                        Text(
+                            text = statusLabel(scanStatus),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            text = "$deviceCount threat(s) detected",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+
+                // Start/Stop button
+                FilledTonalButton(
+                    onClick = if (isScanning) onStopScan else onStartScan,
+                ) {
+                    Text(text = if (isScanning) "Stop Scan" else "Start Scan")
                 }
             }
 
-            // Start/Stop button
-            FilledTonalButton(
-                onClick = if (isScanning) onStopScan else onStartScan,
-            ) {
-                Text(text = if (isScanning) "Stop Scan" else "Start Scan")
+            // Status warning banners
+            when (scanStatus) {
+                ScanStatus.BLUETOOTH_OFF -> {
+                    StatusBanner(
+                        text = "Bluetooth is off. Enable Bluetooth to resume scanning.",
+                        color = Color(0xFFFFF3E0),
+                        textColor = Color(0xFFE65100),
+                    )
+                }
+                ScanStatus.LOCATION_REQUIRED -> {
+                    StatusBanner(
+                        text = "Location services are required for BLE scanning on this Android version.",
+                        color = Color(0xFFFFF3E0),
+                        textColor = Color(0xFFE65100),
+                    )
+                }
+                ScanStatus.SCAN_FAILED -> {
+                    StatusBanner(
+                        text = "Scan failed. Try stopping and restarting the scan.",
+                        color = Color(0xFFFFEBEE),
+                        textColor = Color(0xFFC62828),
+                    )
+                }
+                ScanStatus.PERMISSION_DENIED -> {
+                    StatusBanner(
+                        text = "Bluetooth permission denied. Grant permission in app settings.",
+                        color = Color(0xFFFFEBEE),
+                        textColor = Color(0xFFC62828),
+                    )
+                }
+                else -> { /* no banner */ }
             }
         }
     }
 }
 
 @Composable
-private fun EmptyState(isScanning: Boolean) {
+private fun StatusBanner(text: String, color: Color, textColor: Color) {
+    Surface(
+        color = color,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodySmall,
+            color = textColor,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+    }
+}
+
+private fun statusLabel(status: ScanStatus): String = when (status) {
+    ScanStatus.SCANNING -> "Scanning"
+    ScanStatus.IDLE -> "Paused"
+    ScanStatus.BLUETOOTH_OFF -> "Bluetooth Off"
+    ScanStatus.LOCATION_REQUIRED -> "Location Required"
+    ScanStatus.SCAN_FAILED -> "Scan Failed"
+    ScanStatus.PERMISSION_DENIED -> "Permission Denied"
+}
+
+@Composable
+private fun EmptyState(isScanning: Boolean, scanStatus: ScanStatus) {
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center,
@@ -135,15 +207,31 @@ private fun EmptyState(isScanning: Boolean) {
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
-                text = if (isScanning) "Scanning for devices..." else "No threats detected",
+                text = when {
+                    scanStatus == ScanStatus.BLUETOOTH_OFF -> "Bluetooth is off"
+                    scanStatus == ScanStatus.LOCATION_REQUIRED -> "Location services required"
+                    scanStatus == ScanStatus.SCAN_FAILED -> "Scan failed"
+                    scanStatus == ScanStatus.PERMISSION_DENIED -> "Permission denied"
+                    isScanning -> "Scanning for devices..."
+                    else -> "No threats detected"
+                },
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
-                text = if (isScanning) {
-                    "Threats will appear here as they are detected."
-                } else {
-                    "Start a scan to begin monitoring for BLE surveillance devices."
+                text = when {
+                    scanStatus == ScanStatus.BLUETOOTH_OFF ->
+                        "Enable Bluetooth in your device settings to start scanning."
+                    scanStatus == ScanStatus.LOCATION_REQUIRED ->
+                        "On this Android version, location must be enabled for BLE scanning."
+                    scanStatus == ScanStatus.SCAN_FAILED ->
+                        "An error occurred. Try stopping and restarting the scan."
+                    scanStatus == ScanStatus.PERMISSION_DENIED ->
+                        "Go to app settings to grant the required Bluetooth permission."
+                    isScanning ->
+                        "Threats will appear here as they are detected."
+                    else ->
+                        "Start a scan to begin monitoring for BLE surveillance devices."
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

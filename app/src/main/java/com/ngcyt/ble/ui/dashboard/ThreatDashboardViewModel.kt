@@ -6,6 +6,7 @@ import com.ngcyt.ble.data.settings.AppSettings
 import com.ngcyt.ble.domain.detection.DetectionEngine
 import com.ngcyt.ble.domain.model.ThreatAssessment
 import com.ngcyt.ble.scanner.BleScanService
+import com.ngcyt.ble.scanner.ScanStatus
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.*
@@ -25,6 +26,8 @@ class ThreatDashboardViewModel @Inject constructor(
     val threats: StateFlow<List<ThreatAssessment>> = _threats.asStateFlow()
 
     val isScanning: StateFlow<Boolean> = BleScanService.isScanning
+
+    val scanStatus: StateFlow<ScanStatus> = BleScanService.scanStatus
 
     val deviceCount: StateFlow<Int> = BleScanService.threatCount
 
