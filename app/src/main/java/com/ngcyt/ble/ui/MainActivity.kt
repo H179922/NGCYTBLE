@@ -1,5 +1,8 @@
 package com.ngcyt.ble.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -16,11 +19,16 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.core.content.ContextCompat
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.ngcyt.ble.ui.permissions.PermissionScreen
 import com.ngcyt.ble.ui.theme.NgcytBleTheme
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -32,8 +40,29 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             NgcytBleTheme {
-                MainScreen()
+                var permissionsGranted by rememberSaveable { mutableStateOf(hasRequiredPermissions()) }
+                if (permissionsGranted) {
+                    MainScreen()
+                } else {
+                    PermissionScreen(onAllGranted = { permissionsGranted = true })
+                }
             }
+        }
+    }
+
+    private fun hasRequiredPermissions(): Boolean {
+        val required = mutableListOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            required.add(Manifest.permission.BLUETOOTH_SCAN)
+            required.add(Manifest.permission.BLUETOOTH_CONNECT)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            required.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        return required.all {
+            ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
         }
     }
 }
