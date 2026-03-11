@@ -146,7 +146,7 @@ fun ThreatCard(
                     }
                 }
 
-                // Details row: time windows, duration, service UUIDs
+                // Details row: windows count, duration, service UUIDs, fingerprint
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -154,12 +154,12 @@ fun ThreatCard(
                     if (threat.timeBucketsPresent.isNotEmpty()) {
                         Column {
                             Text(
-                                text = "Time Windows",
+                                text = "Windows",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             Text(
-                                text = threat.timeBucketsPresent.joinToString(", "),
+                                text = "${threat.timeBucketsPresent.size}",
                                 style = MaterialTheme.typography.bodySmall,
                             )
                         }
@@ -186,6 +186,20 @@ fun ThreatCard(
                             )
                             Text(
                                 text = "${threat.serviceUuids.size} UUID(s)",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                    }
+
+                    if (threat.fingerprintConfidence > 0.0) {
+                        Column {
+                            Text(
+                                text = "Fingerprint",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                text = "${threat.fingerprintConfidence.toInt()}%",
                                 style = MaterialTheme.typography.bodySmall,
                             )
                         }

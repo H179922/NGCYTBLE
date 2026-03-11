@@ -3,7 +3,6 @@ package com.ngcyt.ble.ui.detail
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -50,7 +49,7 @@ private fun ThreatLevel.label(): String = when (this) {
 
 // -- Screen --
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DeviceDetailScreen(
     onNavigateBack: () -> Unit,
@@ -134,8 +133,8 @@ private fun DeviceDetailContent(
             }
         }
 
-        // -- Fingerprint --
-        if (state.fingerprint != null) {
+        // -- Fingerprint (only show when device is correlated) --
+        if (state.fingerprint != null && state.fingerprint.clusterConfidence > 0.0) {
             item {
                 FingerprintSection(fingerprint = state.fingerprint)
             }
@@ -255,7 +254,6 @@ private fun ThreatLevelBadge(level: ThreatLevel) {
 
 // -- Threat Assessment Section --
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ThreatAssessmentSection(threat: ThreatAssessment) {
     SectionCard(title = "Threat Assessment") {
@@ -287,25 +285,12 @@ private fun ThreatAssessmentSection(threat: ThreatAssessment) {
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Time windows as chips
+        // Time windows summary
         if (threat.timeBucketsPresent.isNotEmpty()) {
-            Text(
-                text = "Time Windows",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            LabeledValue(
+                label = "Time Windows",
+                value = "${threat.timeBucketsPresent.size} period(s)",
             )
-            Spacer(modifier = Modifier.height(4.dp))
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                threat.timeBucketsPresent.forEach { bucket ->
-                    AssistChip(
-                        onClick = {},
-                        label = { Text(bucket) },
-                    )
-                }
-            }
         }
 
         // Service UUIDs in threat
