@@ -36,6 +36,7 @@ data class DeviceDetailUiState(
     val similarDevices: List<SimilarDevice> = emptyList(),
     val isSimilarityLoading: Boolean = false,
     val isIgnored: Boolean = false,
+    val hasMultipleSources: Boolean = false,
     val error: String? = null,
 )
 
@@ -80,6 +81,10 @@ class DeviceDetailViewModel @Inject constructor(
                 val ignoredMacs = appSettings.ignoreMacs.first()
                 val isIgnored = mac in ignoredMacs
 
+                // Check if threats come from multiple sources
+                val sources = allThreats.map { it.source }.toSet()
+                val hasMultipleSources = sources.size > 1
+
                 // Load similar devices
                 val similar = loadSimilarDevices()
 
@@ -89,6 +94,7 @@ class DeviceDetailViewModel @Inject constructor(
                     fingerprint = fingerprintInfo,
                     similarDevices = similar,
                     isIgnored = isIgnored,
+                    hasMultipleSources = hasMultipleSources,
                 )
             } catch (e: Exception) {
                 _uiState.value = DeviceDetailUiState(

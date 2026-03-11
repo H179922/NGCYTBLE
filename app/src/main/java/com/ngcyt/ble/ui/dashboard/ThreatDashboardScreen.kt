@@ -52,6 +52,7 @@ fun ThreatDashboardScreen(
             if (threats.isEmpty()) {
                 EmptyState(isScanning = isScanning, scanStatus = scanStatus)
             } else {
+                val showSource = threats.map { it.source }.toSet().size > 1
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -63,6 +64,7 @@ fun ThreatDashboardScreen(
                     ) { threat ->
                         ThreatCard(
                             threat = threat,
+                            showSource = showSource,
                             onClick = { onThreatClick(threat.mac) },
                         )
                     }

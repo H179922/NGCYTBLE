@@ -31,6 +31,7 @@ private val ThreatLevelColors = mapOf(
 @Composable
 fun ThreatCard(
     threat: ThreatAssessment,
+    showSource: Boolean = false,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -130,13 +131,14 @@ fun ThreatCard(
                 }
 
                 // Badge row: source, MAC randomized
-                val hasBadges = threat.source == ThreatSource.WIFI_PI || threat.isMacRandomized
+                val showPiBadge = showSource && threat.source == ThreatSource.WIFI_PI
+                val hasBadges = showPiBadge || threat.isMacRandomized
                 if (hasBadges) {
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        if (threat.source == ThreatSource.WIFI_PI) {
+                        if (showPiBadge) {
                             CompactBadge(
                                 text = "Via Pi",
                                 containerColor = MaterialTheme.colorScheme.tertiaryContainer,

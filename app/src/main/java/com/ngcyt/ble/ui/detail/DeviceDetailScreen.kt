@@ -129,7 +129,7 @@ private fun DeviceDetailContent(
         // -- Threat Assessment --
         if (threat != null) {
             item {
-                ThreatAssessmentSection(threat = threat)
+                ThreatAssessmentSection(threat = threat, showSource = state.hasMultipleSources)
             }
         }
 
@@ -267,7 +267,7 @@ private fun ThreatLevelBadge(level: ThreatLevel) {
 // -- Threat Assessment Section --
 
 @Composable
-private fun ThreatAssessmentSection(threat: ThreatAssessment) {
+private fun ThreatAssessmentSection(threat: ThreatAssessment, showSource: Boolean = false) {
     SectionCard(title = "Threat Assessment") {
         // Reasoning
         Text(
@@ -284,16 +284,17 @@ private fun ThreatAssessmentSection(threat: ThreatAssessment) {
             value = formatDuration(threat.durationMinutes),
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Source badge
-        LabeledValue(
-            label = "Source",
-            value = when (threat.source) {
-                ThreatSource.BLE_LOCAL -> "BLE Local"
-                ThreatSource.WIFI_PI -> "WiFi Pi"
-            },
-        )
+        // Source — only shown when threats come from multiple sources
+        if (showSource) {
+            Spacer(modifier = Modifier.height(8.dp))
+            LabeledValue(
+                label = "Source",
+                value = when (threat.source) {
+                    ThreatSource.BLE_LOCAL -> "BLE Local"
+                    ThreatSource.WIFI_PI -> "WiFi Pi"
+                },
+            )
+        }
 
         Spacer(modifier = Modifier.height(12.dp))
 
