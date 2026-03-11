@@ -47,6 +47,7 @@ dependencies {
     implementation(libs.compose.ui)
     implementation(libs.compose.material3)
     implementation(libs.compose.tooling.preview)
+    implementation(libs.compose.icons.extended)
     debugImplementation(libs.compose.tooling)
 
     // Lifecycle
