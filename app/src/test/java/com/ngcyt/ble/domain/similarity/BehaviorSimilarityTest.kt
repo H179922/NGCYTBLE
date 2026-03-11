@@ -1,7 +1,6 @@
 package com.ngcyt.ble.domain.similarity
 
 import org.junit.Assert.*
-import org.junit.Before
 import org.junit.Test
 
 class BehaviorSimilarityTest {
@@ -47,19 +46,19 @@ class BehaviorSimilarityTest {
 
         // Device A: regular, high frequency
         for (i in 0 until 20) {
-            engine.recordDeviceBehavior("deviceA", 1000.0 + i * 30.0, "svc-1")
+            engine.recordDeviceBehavior("deviceA", 1000.0 + i * 30.0, "svc-1", false)
         }
         engine.updateDeviceVector("deviceA")
 
         // Device B: similar pattern
         for (i in 0 until 20) {
-            engine.recordDeviceBehavior("deviceB", 2000.0 + i * 30.0, "svc-1")
+            engine.recordDeviceBehavior("deviceB", 2000.0 + i * 30.0, "svc-1", false)
         }
         engine.updateDeviceVector("deviceB")
 
         // Device C: very different pattern
         for (i in 0 until 3) {
-            engine.recordDeviceBehavior("deviceC", 5000.0 + i * 300.0, "svc-x")
+            engine.recordDeviceBehavior("deviceC", 5000.0 + i * 300.0, "svc-x", false)
         }
         engine.updateDeviceVector("deviceC")
 
