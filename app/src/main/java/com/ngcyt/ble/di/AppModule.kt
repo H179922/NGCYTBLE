@@ -3,6 +3,7 @@ package com.ngcyt.ble.di
 import android.content.Context
 import androidx.room.Room
 import com.ngcyt.ble.data.db.AppDatabase
+import com.ngcyt.ble.data.companion.CompanionClient
 import com.ngcyt.ble.data.settings.AppSettings
 import com.ngcyt.ble.data.settings.dataStore
 import com.ngcyt.ble.domain.detection.DetectionEngine
@@ -29,6 +30,12 @@ object AppModule {
     @Singleton
     fun provideAppSettings(@ApplicationContext context: Context): AppSettings {
         return AppSettings(context.dataStore)
+    }
+
+    @Provides
+    @Singleton
+    fun provideCompanionClient(): CompanionClient {
+        return CompanionClient()
     }
 
     @Provides
