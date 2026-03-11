@@ -18,7 +18,7 @@ import androidx.lifecycle.viewModelScope
 class ThreatDashboardViewModel @Inject constructor(
     private val detectionEngine: DetectionEngine,
     private val appSettings: AppSettings,
-    @ApplicationContext private val appContext: Context,
+    @param:ApplicationContext private val appContext: Context,
 ) : ViewModel() {
 
     private val _threats = MutableStateFlow<List<ThreatAssessment>>(emptyList())

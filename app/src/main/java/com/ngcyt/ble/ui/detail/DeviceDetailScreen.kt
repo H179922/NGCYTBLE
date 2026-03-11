@@ -19,7 +19,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.ngcyt.ble.domain.model.ThreatAssessment
 import com.ngcyt.ble.domain.model.ThreatLevel
 import com.ngcyt.ble.domain.model.ThreatSource
